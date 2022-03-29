@@ -1,14 +1,15 @@
 import { GetStaticPaths, GetStaticProps } from 'next';
 import Head from 'next/head';
-
+import { format } from 'date-fns';
+import ptBR from 'date-fns/locale/pt-BR';
 import { FiCalendar, FiUser, FiClock } from 'react-icons/fi';
 
 import Prismic from '@prismicio/client';
 
 import { RichText } from 'prismic-dom';
 import { useRouter } from 'next/router';
-import React from 'react';
 import Link from 'next/link';
+import { useMemo } from 'react';
 import { getPrismicClient } from '../../services/prismic';
 
 import commonStyles from '../../styles/common.module.scss';
@@ -58,25 +59,51 @@ export default function Post({
     return <h1>Carregando...</h1>;
   }
 
-  const totalWords = post.data.content.reduce(
-    (totalContent, currentContent) => {
-      const headingWords = currentContent.heading?.split(' ').length || 0;
+  function getReadingTime(): number {
+    const content = post.data.content.reduce((words, postContent) => {
+      // eslint-disable-next-line no-param-reassign
+      words += `${postContent.heading} `;
+      // eslint-disable-next-line no-param-reassign
+      words += RichText.asText(postContent.body);
+      return words;
+    }, '');
 
-      const bodyWords = currentContent.body.reduce((totalBody, currentBody) => {
-        const textWords = currentBody.text.split(' ').length;
-        return totalBody + textWords;
-      }, 0);
+    const wordCount = content.split(/\s/).length;
 
-      return totalContent + headingWords + bodyWords;
-    },
-    0
-  );
+    return Math.ceil(wordCount / 200);
+  }
 
-  const timeEstimmed = Math.ceil(totalWords / 200);
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const readTime = useMemo(() => {
+    if (router.isFallback) {
+      return 0;
+    }
 
-  const isPostEdited =
-    post.first_publication_date !== post.last_publication_date;
+    const wordsPerMinute = 200;
 
+    const contentWords = post.data.content.reduce(
+      (summedContents, currentContent) => {
+        const headingWords = currentContent.heading.split(/\s/g).length;
+
+        const bodyText = RichText.asText(currentContent.body);
+        const bodyWords = bodyText.split(/\s/g).length;
+
+        return summedContents + headingWords + bodyWords;
+      },
+      0
+    );
+
+    const minutes = contentWords / wordsPerMinute;
+    const totalReadTime = Math.ceil(minutes);
+
+    return totalReadTime;
+  }, [post, router.isFallback]);
+
+  function isEdited(): boolean {
+    return post.first_publication_date !== post.last_publication_date;
+  }
+
+  console.log(post);
   return (
     <>
       <Head>
@@ -100,14 +127,16 @@ export default function Post({
             </span>
             <time>
               <FiClock />
-              {`${timeEstimmed} min`}
+              {`${readTime} min`}
             </time>
           </div>
-          {isPostEdited && (
-            <span>
-              {`* editado em ${formatDate(post.last_publication_date, true)}`}
-            </span>
-          )}
+          {/* {isEdited() && (
+            <p className={styles.editedDate}>
+              <time>
+                * editado em {formatDate(post.last_publication_date, true)}
+              </time>
+            </p>
+          )} */}
           {post.data.content.map(content => {
             return (
               <section key={content.heading} className={styles.postContent}>
